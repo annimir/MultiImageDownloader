@@ -1,9 +1,8 @@
 ﻿<Application x:Class="MultiImageDownloader.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:MultiImageDownloader"
-             StartupUri="MainWindow.xaml">
+             StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
-         
+        <converters:IndexConverter x:Key="IndexConverter" xmlns:converters="clr-namespace:MultiImageDownloader.Converters"/>
     </Application.Resources>
 </Application>
