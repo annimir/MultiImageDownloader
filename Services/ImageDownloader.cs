@@ -1,30 +1,31 @@
-﻿using System;
+﻿using Microsoft.Extensions.Logging;
+using MultiImageDownloader.Models;
+using System;
 using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace MultiImageDownloader.Services
 {
-    public class ImageDownloadService
+    public class ImageDownloader : IImageDownloader
     {
-        private readonly HttpClient _httpClient;
+        private readonly ILogger<ImageDownloader> _logger;
 
-        public ImageDownloadService()
+        public ImageDownloader(ILogger<ImageDownloader> logger)
         {
-            _httpClient = new HttpClient();
+            _logger = logger;
         }
 
-        public async Task<BitmapImage> DownloadImageAsync(
-            string url,
-            IProgress<double> progress,
-            CancellationToken cancellationToken = default
-            )
+        public async Task<ImageSource> DownloadImageAsync(string url, IProgress<double> progress, CancellationToken cancellationToken)
         {
             try
             {
-                var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                using var httpClient = new HttpClient();
+                using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
                 response.EnsureSuccessStatusCode();
 
                 var totalBytes = response.Content.Headers.ContentLength ?? -1L;
@@ -32,18 +33,21 @@ namespace MultiImageDownloader.Services
                 var buffer = new byte[8192];
 
                 await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                await using var memoryStream = new MemoryStream();
+                var memoryStream = new MemoryStream();
 
                 while (true)
                 {
-                    var bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+                    var bytesRead = await contentStream.ReadAsync(buffer, cancellationToken);
                     if (bytesRead == 0) break;
 
-                    await memoryStream.WriteAsync(buffer, 0, bytesRead, cancellationToken);
+                    await memoryStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
                     receivedBytes += bytesRead;
 
                     if (totalBytes > 0)
-                        progress?.Report((double)receivedBytes / totalBytes * 100);
+                    {
+                        var currentProgress = (double)receivedBytes / totalBytes * 100;
+                        progress?.Report(currentProgress);
+                    }
                 }
 
                 memoryStream.Position = 0;
@@ -56,13 +60,10 @@ namespace MultiImageDownloader.Services
 
                 return bitmap;
             }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
             catch (Exception ex)
             {
-                throw new Exception($"Ошибка загрузки: {ex.Message}");
+                _logger.LogError(ex, "Error downloading image from {Url}", url);
+                return null;
             }
         }
     }

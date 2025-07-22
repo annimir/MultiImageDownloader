@@ -1,115 +1,125 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MultiImageDownloader.Models;
+using Microsoft.Extensions.Logging;
 using MultiImageDownloader.Services;
-using System;
+using PropertyChanged;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Input;
+using System.IO;
+
 
 namespace MultiImageDownloader.ViewModels
 {
     public partial class MainViewModel : ObservableObject
     {
-        private readonly ImageDownloadService _downloadService;
-        private CancellationTokenSource[] _cancellationTokenSources;
+        private readonly IImageDownloader _imageDownloader;
+        private readonly ILogger<MainViewModel> _logger;
 
-        public ObservableCollection<ImageDownloadItem> DownloadItems { get; }
+        public ObservableCollection<DownloadItem> DownloadItems { get; } = new();
 
         [ObservableProperty]
         private double _totalProgress;
 
-        public MainViewModel()
+        [ObservableProperty]
+        private string _statusText;
+
+        public MainViewModel(IImageDownloader imageDownloader, ILogger<MainViewModel> logger)
         {
-            _downloadService = new ImageDownloadService();
-            _cancellationTokenSources = new CancellationTokenSource[3];
-            DownloadItems = new ObservableCollection<ImageDownloadItem>
+            _imageDownloader = imageDownloader;
+            _logger = logger;
+
+            // Initialize 3 download slots
+            for (int i = 0; i < 3; i++)
             {
-                new ImageDownloadItem(),
-                new ImageDownloadItem(),
-                new ImageDownloadItem()
-            };
+                DownloadItems.Add(new DownloadItem());
+            }
         }
 
         [RelayCommand]
-        private async Task StartDownload(int index)
+        private async Task StartDownloadAsync(DownloadItem item)
         {
-            // Проверяем валидность индекса
-            if (index < 0 || index >= DownloadItems.Count)
-            {
-                Debug.WriteLine($"Некорректный индекс: {index}");
-                return;
-            }
-
-            var item = DownloadItems[index];
-            if (string.IsNullOrWhiteSpace(item.Url))
-                return;
-
-            // Отменяем текущую загрузку (если есть)
-            _cancellationTokenSources[index]?.Cancel();
-            _cancellationTokenSources[index] = new CancellationTokenSource();
+            if (item == null || string.IsNullOrWhiteSpace(item.Url)) return;
+            if (item.IsDownloading) return;
 
             item.IsDownloading = true;
-            var progress = new Progress<double>(value => item.Progress = value);
+            item.CancellationTokenSource = new CancellationTokenSource();
+
+            var progress = new Progress<double>(p =>
+            {
+                item.Progress = p;
+                UpdateProgress();
+            });
 
             try
             {
-                item.Image = await _downloadService.DownloadImageAsync(
+                _logger.LogInformation("Starting download from {Url}", item.Url);
+                StatusText = $"Downloading: {GetFileNameFromUrl(item.Url)}";
+
+                item.Image = await _imageDownloader.DownloadImageAsync(
                     item.Url,
                     progress,
-                    _cancellationTokenSources[index].Token);
+                    item.CancellationTokenSource.Token);
+
+                StatusText = $"Completed: {GetFileNameFromUrl(item.Url)}";
             }
             catch (OperationCanceledException)
             {
-                item.Progress = 0;
+                _logger.LogInformation("Download canceled for {Url}", item.Url);
+                StatusText = $"Canceled: {GetFileNameFromUrl(item.Url)}";
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Ошибка загрузки: {ex.Message}");
+                _logger.LogError(ex, "Error downloading from {Url}", item.Url);
+                StatusText = $"Error: {GetFileNameFromUrl(item.Url)}";
             }
             finally
             {
                 item.IsDownloading = false;
-                UpdateTotalProgress();
+                UpdateProgress();
             }
         }
 
         [RelayCommand]
-        private void StopDownload(int index)
+        private void StopDownload(DownloadItem item)
         {
-            if (index < 0 || index >= _cancellationTokenSources.Length)
-            {
-                Debug.WriteLine($"Некорректный индекс для отмены: {index}");
-                return;
-            }
-            _cancellationTokenSources[index]?.Cancel();
+            if (item == null || !item.IsDownloading) return;
+
+            _logger.LogInformation("Stopping download from {Url}", item.Url);
+            item.CancellationTokenSource?.Cancel();
         }
 
         [RelayCommand]
-        private async Task DownloadAll()
+        private async Task DownloadAllAsync()
         {
-            for (int i = 0; i < DownloadItems.Count; i++)
-                await StartDownload(i); // Используем сгенерированный метод
+            _logger.LogInformation("Starting all downloads");
+            StatusText = "Downloading all images...";
+
+            var tasks = DownloadItems
+                .Where(item => !string.IsNullOrWhiteSpace(item.Url))
+                .Select(item => StartDownloadAsync(item));
+
+            await Task.WhenAll(tasks);
+            StatusText = "All downloads completed";
         }
 
-        private void UpdateTotalProgress()
+        private void UpdateProgress()
         {
-            double sum = 0;
-            int activeDownloads = 0;
+            var activeDownloads = DownloadItems.Where(x => x.IsDownloading).ToList();
+            TotalProgress = activeDownloads.Count > 0 ? activeDownloads.Average(x => x.Progress) : 0;
+        }
 
-            foreach (var item in DownloadItems)
+        private static string GetFileNameFromUrl(string url)
+        {
+            try
             {
-                if (item.IsDownloading)
-                {
-                    sum += item.Progress;
-                    activeDownloads++;
-                }
+                return Path.GetFileName(new Uri(url).LocalPath);
             }
-
-            TotalProgress = activeDownloads > 0 ? sum / activeDownloads : 0;
+            catch
+            {
+                return url.Length > 30 ? url[..30] + "..." : url;
+            }
         }
     }
 }
