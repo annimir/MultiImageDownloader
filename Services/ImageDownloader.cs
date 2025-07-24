@@ -23,6 +23,11 @@ namespace MultiImageDownloader.Services
         {
             try
             {
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !(uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                {
+                    return null;
+                }
+
                 using var httpClient = new HttpClient();
                 using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
@@ -57,6 +62,11 @@ namespace MultiImageDownloader.Services
                 bitmap.StreamSource = memoryStream;
                 bitmap.EndInit();
                 bitmap.Freeze();
+
+                if (response.Content.Headers.ContentType?.MediaType?.StartsWith("image/") != true)
+                {
+                    return null;
+                }
 
                 return bitmap;
             }

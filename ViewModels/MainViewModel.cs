@@ -25,6 +25,18 @@ namespace MultiImageDownloader.ViewModels
         [ObservableProperty]
         private string _statusText;
 
+        [ObservableProperty]
+        private string _globalErrorMessage;
+
+        [ObservableProperty]
+        private bool _hasGlobalError;
+
+        [ObservableProperty]
+        private string _errorBoxMessage;
+
+        [ObservableProperty]
+        private bool _isErrorBoxVisible;
+
         public MainViewModel(IImageDownloader imageDownloader, ILogger<MainViewModel> logger)
         {
             _imageDownloader = imageDownloader;
@@ -40,7 +52,12 @@ namespace MultiImageDownloader.ViewModels
         [RelayCommand]
         private async Task StartDownloadAsync(DownloadItem item)
         {
-            if (item == null || string.IsNullOrWhiteSpace(item.Url)) return;
+            if (string.IsNullOrWhiteSpace(item.Url))
+            {
+                ShowError("Error 01: URL cannot be empty");
+                return;
+            }
+
             if (item.IsDownloading) return;
 
             item.IsDownloading = true;
@@ -57,12 +74,25 @@ namespace MultiImageDownloader.ViewModels
                 _logger.LogInformation("Starting download from {Url}", item.Url);
                 StatusText = $"Downloading: {GetFileNameFromUrl(item.Url)}";
 
-                item.Image = await _imageDownloader.DownloadImageAsync(
+                item.IsDownloading = true;
+                item.HasError = false;
+
+                var result = await _imageDownloader.DownloadImageAsync(
                     item.Url,
                     progress,
                     item.CancellationTokenSource.Token);
 
-                StatusText = $"Completed: {GetFileNameFromUrl(item.Url)}";
+                if (result == null)
+                {
+                    item.ErrorMessage = "Error 02: Failed to load image";
+                    item.HasError = true;
+                    ShowError(item.ErrorMessage);
+                }
+                else
+                {
+                    item.Image = result;
+                    StatusText = $"Completed: {GetFileNameFromUrl(item.Url)}";
+                }
             }
             catch (OperationCanceledException)
             {
@@ -73,6 +103,9 @@ namespace MultiImageDownloader.ViewModels
             {
                 _logger.LogError(ex, "Error downloading from {Url}", item.Url);
                 StatusText = $"Error: {GetFileNameFromUrl(item.Url)}";
+                item.ErrorMessage = $"Error 03: {ex.Message}";
+                item.HasError = true;
+                ShowError(item.ErrorMessage);
             }
             finally
             {
@@ -93,6 +126,12 @@ namespace MultiImageDownloader.ViewModels
         [RelayCommand]
         private async Task DownloadAllAsync()
         {
+            if (DownloadItems.All(x => string.IsNullOrWhiteSpace(x.Url)))
+            {
+                ShowError("Error 04: All URL fields are empty");
+                return;
+            }
+
             _logger.LogInformation("Starting all downloads");
             StatusText = "Downloading all images...";
 
@@ -120,6 +159,15 @@ namespace MultiImageDownloader.ViewModels
             {
                 return url.Length > 30 ? url[..30] + "..." : url;
             }
+        }
+
+        private void ShowError(string message)
+        {
+            ErrorBoxMessage = message;
+            IsErrorBoxVisible = true;
+
+            // Скрыть текстовый бокс через 7 секунд
+            Task.Delay(7000).ContinueWith(_ => IsErrorBoxVisible = false);
         }
     }
 }

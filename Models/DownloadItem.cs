@@ -11,6 +11,8 @@ public class DownloadItem : ObservableObject
     private bool _isDownloading;
     private double _progress;
     private CancellationTokenSource _cancellationTokenSource;
+    private string _errorMessage;
+    private bool _hasError;
 
     public string Url
     {
@@ -40,5 +42,17 @@ public class DownloadItem : ObservableObject
     {
         get => _cancellationTokenSource;
         set => SetProperty(ref _cancellationTokenSource, value);
+    }
+
+    public string ErrorMessage
+    {
+        get => _errorMessage;
+        set => SetProperty(ref _errorMessage, value);
+    }
+
+    public bool HasError
+    {
+        get => _hasError;
+        set => SetProperty(ref _hasError, value);
     }
 }
