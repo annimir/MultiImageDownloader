@@ -21,14 +21,11 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <!-- Для текстового бокса с ошибками -->
         </Grid.RowDefinitions>
 
-        <!-- Заголовок -->
         <TextBlock Text="Image Downloader" FontSize="24" FontWeight="Bold" 
                    HorizontalAlignment="Center" Margin="0,0,0,10" Foreground="#333"/>
 
-        <!-- Download Items -->
         <ItemsControl Grid.Row="1" ItemsSource="{Binding DownloadItems}">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -103,21 +100,17 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- Total Progress -->
         <ProgressBar Grid.Row="2" Value="{Binding TotalProgress}" Height="20" 
                      Margin="0,10" Background="#E0E0E0" Foreground="#2196F3"/>
 
-        <!-- Status Text -->
         <TextBlock Grid.Row="3" Text="{Binding StatusText}" HorizontalAlignment="Center" 
                    Margin="0,5" FontSize="16" Foreground="#555"/>
 
-        <!-- Download All Button -->
         <Button Grid.Row="4" Content="Download All" Command="{Binding DownloadAllCommand}" 
                 HorizontalAlignment="Center" Margin="0,10" Padding="10,5" 
                 Background="#2196F3" Foreground="White" 
                 BorderBrush="Transparent" FontSize="16"/>
 
-        <!-- Текстовый бокс для ошибок -->
         <Border Grid.Row="4" Background="White" BorderBrush="Red" BorderThickness="2" 
                 Visibility="{Binding IsErrorBoxVisible, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="547,53,0,0" Grid.RowSpan="2">
             <TextBlock Text="{Binding ErrorBoxMessage}" Margin="10" Foreground="Red"/>
